@@ -1,0 +1,206 @@
+---
+title: "Análise de causalidade entre dados hidrográficos e operacionais da hidrelétricas brasileiras"
+author: "Lilian Kingston"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, include = TRUE,echo = FALSE, warn = -1, digits = 3)
+
+library(tidyverse)
+library(stringr)
+library(xts)
+library(forecast)
+library(seasonal)
+library(ggplot2)
+
+coletar_e_formatar_CMO = function(){
+  
+  nomes_colunas = names(read.csv(url(
+    "https://ons-dl-prod-opendata.s3.amazonaws.com/dataset/cmo_se/CMO_SEMANAL_2011.csv"), sep = ";"))
+  dados_decenais = data.frame(matrix(nrow=0, ncol = length(nomes_colunas))) 
+  colnames(dados_decenais) = nomes_colunas
+  
+  for (i in 2005:2021){
+    dados_anuais = as.data.frame(read.csv(url(paste(
+      "https://ons-dl-prod-opendata.s3.amazonaws.com/dataset/cmo_se/CMO_SEMANAL_",i , ".csv", sep = "")),
+      sep=";"))
+    
+    dados_anuais = aggregate(
+      as.numeric(dados_anuais$val_cmomediasemanal), 
+      by=list(data=dados_anuais$din_instante), FUN="mean")
+    dados_anuais[1] = data.frame(lapply(dados_anuais[1], function(x) {str_sub(x,1,7)}))
+    dados_anuais = aggregate(
+      as.numeric(dados_anuais$x), 
+      by=list(data=dados_anuais$data), FUN="mean")
+    
+    dados_decenais = rbind(dados_decenais, dados_anuais)
+  }
+  
+  dados_decenais[,1] <- as.Date(paste(dados_decenais[,1],"-01",sep=""))
+  dados_decenais <- xts(dados_decenais[,-1], order.by=dados_decenais[,1])
+  
+  return(dados_decenais)
+}
+
+coletar_e_formatar_dados_hidrologicos = function(c){
+  
+  nomes_colunas = names(read.csv(url(
+    "https://ons-dl-prod-opendata.s3.amazonaws.com/dataset/dados_hidrologicos_di/DADOS_HIDROLOGICOS_RES_2022.csv"),sep = ";"))
+  dados_decenais = data.frame(matrix(nrow=0,ncol=length(nomes_colunas))) 
+  colnames(dados_decenais) = nomes_colunas
+  
+  for (i in 2005:2021){
+    dados_anuais = as.data.frame(read.csv(url(paste(
+      "https://ons-dl-prod-opendata.s3.amazonaws.com/dataset/dados_hidrologicos_di/DADOS_HIDROLOGICOS_RES_",i,
+      ".csv",sep="")),sep=";"))
+    
+    dados_anuais = aggregate(
+      as.numeric(dados_anuais[,c]), 
+      by=list(data=dados_anuais$din_instante), FUN="mean")
+    dados_anuais[1] = data.frame(lapply(dados_anuais[1], function(x) {str_sub(x,1,7)}))
+    dados_anuais = aggregate(
+      as.numeric(dados_anuais$x), 
+      by=list(data=dados_anuais$data), FUN="mean")
+    
+    dados_decenais = rbind(dados_decenais, dados_anuais)
+  }
+  
+  dados_decenais[,1] <- as.Date(paste(dados_decenais[,1],"-01",sep=""))
+  dados_decenais <- xts(dados_decenais[,-1], order.by=dados_decenais[,1])
+  
+  return(dados_decenais)
+}
+
+```
+
+```{r loading data, include=FALSE, echo= FALSE}
+
+CMO = coletar_e_formatar_CMO()
+nm = coletar_e_formatar_dados_hidrologicos(10)
+nj = coletar_e_formatar_dados_hidrologicos(11)
+vutl = coletar_e_formatar_dados_hidrologicos(12)
+vafl = coletar_e_formatar_dados_hidrologicos(13)
+vtrb = coletar_e_formatar_dados_hidrologicos(14)
+vv = coletar_e_formatar_dados_hidrologicos(15)
+vo = coletar_e_formatar_dados_hidrologicos(16)
+vd = coletar_e_formatar_dados_hidrologicos(17)
+vtrn = coletar_e_formatar_dados_hidrologicos(18)
+vn = coletar_e_formatar_dados_hidrologicos(19)
+vart = coletar_e_formatar_dados_hidrologicos(20)
+vi = coletar_e_formatar_dados_hidrologicos(21)
+ve = coletar_e_formatar_dados_hidrologicos(22)
+vuso = coletar_e_formatar_dados_hidrologicos(23)
+dados_hidrologicos = list(nm=nm,nj=nj,vutl=vutl,vafl=vafl,vtrb=vtrb,vv=vv,vo=vo,vd=vd,vtrn=vtrn,vn=vn,vart=vart,vi=vi,ve=ve,vuso=vuso)
+
+```
+
+```{r, fig.align = "center", message=FALSE}
+
+plot(vv)
+
+```
+
+```{r, fig.align = "center", message=FALSE}
+
+par(mfrow = c(1,2))
+
+acf(vv)
+pacf(vv)
+
+```
+
+```{r}
+adf_test = tseries::adf.test(vv, k = 0)
+pp_test = tseries::pp.test(vv)
+test_table = data_frame(`p-valor (Teste ADF)` =  adf_test$p.value, `p-valor (Teste PP)` = pp_test$p.value)
+test_table_knit <- knitr::kable(test_table, caption = "Teste ADF e Teste PP (vv)")
+kableExtra::kable_styling(test_table_knit, full_width = F)
+```
+
+```{r, fig.align = "center", message=FALSE}
+
+plot(CMO)
+
+```
+
+```{r, fig.align = "center", message=FALSE}
+
+par(mfrow = c(1,2))
+
+acf(CMO)
+pacf(CMO)
+
+```
+
+```{r}
+adf_test = tseries::adf.test(CMO, k = 0)
+pp_test = tseries::pp.test(CMO)
+test_table = data_frame(`p-valor (Teste ADF)` =  adf_test$p.value, `p-valor (Teste PP)` = pp_test$p.value)
+test_table_knit <- knitr::kable(test_table, caption = "Teste ADF e Teste PP (CMO)")
+kableExtra::kable_styling(test_table_knit, full_width = F)
+```
+
+```{r, echo=FALSE, fig.width = 7, fig.align = "center"}
+
+CMO_dados_hidrologicos = list()
+
+CMO_dados_hidrologicos = lapply(dados_hidrologicos, function(x) {
+  tabela = na.omit(merge(CMO, x))
+  CMO_dados_hidrologicos[[length(CMO_dados_hidrologicos)+1]] = tabela
+})
+
+colnames(CMO_dados_hidrologicos$vv) = c("CMO","vv")
+
+plot(CMO_dados_hidrologicos$vv)
+
+```
+
+```{r, echo=FALSE}
+vars::VARselect(CMO_dados_hidrologicos$vv, lag.max = 12)$selection
+```
+
+```{r}
+var_CMOvv4 = vars::VAR(CMO_dados_hidrologicos$vv, p = 4)
+var_CMOvv2 = vars::VAR(CMO_dados_hidrologicos$vv, p = 2)
+
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+```
+
+```{r}
+tab_model(var_CMOvv4$varresult$CMO, title = "VAR de CMO em vv de ordem 4")
+```
+```{r}
+tab_model(var_CMOvv4$varresult$vv, title = "VAR de vv em CMO de ordem 4")
+```
+```{r}
+tab_model(var_CMOvv2$varresult$CMO, title = "VAR de CMO em vv de ordem 2")
+```
+```{r}
+tab_model(var_CMOvv2$varresult$vv, title = "VAR de vv em CMO de ordem 2")
+```
+
+```{r, echo=FALSE}
+granger_test_CMOvv2 = 
+  lmtest:: grangertest(CMO_dados_hidrologicos$vv[, 1] ~ CMO_dados_hidrologicos$vv[, 2], order = 2)
+granger_test_CMOvv4 = 
+  lmtest:: grangertest(CMO_dados_hidrologicos$vv[, 1] ~ CMO_dados_hidrologicos$vv[, 2], order = 4)
+granger_test_vvCMO2 = 
+  lmtest:: grangertest(CMO_dados_hidrologicos$vv[, 2] ~ CMO_dados_hidrologicos$vv[, 1], order = 2)
+granger_test_vvCMO4 = 
+  lmtest:: grangertest(CMO_dados_hidrologicos$vv[, 2] ~ CMO_dados_hidrologicos$vv[, 1], order = 4)
+
+test_table = data_frame(
+  `p-valor (CMO em vv, ordem 2)` =  granger_test_CMOvv2$`Pr(>F)`[2],
+  `p-valor (CMO em vv, ordem 4)` =  granger_test_CMOvv4$`Pr(>F)`[2],
+  `p-valor (vv em CMO, ordem 2)` =  granger_test_vvCMO2$`Pr(>F)`[2],
+  `p-valor (vv em CMO, ordem 4)` =  granger_test_vvCMO4$`Pr(>F)`[2])
+test_table_knit <- knitr::kable(test_table, caption = "Teste de Granger")
+kableExtra::kable_styling(test_table_knit, full_width = F)
+```
+
